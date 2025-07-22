@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MPD to HLS Converter</title>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.4/dist/ffmpeg.min.js"></script>
+</head>
+<body>
+    <button id="start-btn">Start Conversion</button>
+    <video id="player" controls width="640"></video>
+    
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
+        
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            // Initialize FFmpeg.wasm
+            await ffmpeg.load();
+            
+            // Download MPD via proxy (to bypass CORS)
+            const mpdResponse = await fetch('/.netlify/functions/download?url=' + 
+                encodeURIComponent('https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg01006-abs-cbn-anc-global-dash-abscbnono/0747e6f9-a3a8-4d5b-8f87-37b7e02ddef7/index.mpd')
+            );
+            
+            // Run conversion
+            ffmpeg.FS('writeFile', 'input.mpd', await fetchFile(await mpdResponse.blob()));
+            await ffmpeg.run(
+                '-i', 'input.mpd',
+                '-c:v', 'copy',
+                '-c:a', 'copy',
+                '-f', 'hls',
+                '-hls_time', '4',
+                '-hls_list_size', '5',
+                '-hls_flags', 'delete_segments',
+                'output.m3u8'
+            );
+            
+            // Get result
+            const m3u8Data = ffmpeg.FS('readFile', 'output.m3u8');
+            const m3u8Url = URL.createObjectURL(new Blob([m3u8Data.buffer], { type: 'application/vnd.apple.mpegurl' }));
+            
+            // Play video
+            document.getElementById('player').src = m3u8Url;
+        });
+    </script>
+</body>
+</html>
